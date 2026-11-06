@@ -1,8 +1,7 @@
 // src/app/api/auth/login/route.ts
-// API de login — autentica con Supabase Auth (soporta email o username)
+// API de login — autentica directamente con Supabase Auth sin intermediación de Prisma
 
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -17,25 +16,10 @@ export async function POST(request: Request) {
       )
     }
 
-    let authEmail = inputIdentifier
-
-    // Si no contiene '@', buscar el correo asociado al username en la BD
-    if (!authEmail.includes('@')) {
-      const dbUser = await prisma.user.findUnique({
-        where: { username: inputIdentifier },
-        select: { id: true, username: true },
-      })
-
-      if (!dbUser) {
-        return NextResponse.json(
-          { success: false, error: 'Credenciales inválidas' },
-          { status: 401 }
-        )
-      }
-
-      // Convención para cuentas con solo username
-      authEmail = `${inputIdentifier.toLowerCase()}@nexoti.local`
-    }
+    // Si no contiene '@', asumimos la convención local de correo para el username
+    const authEmail = inputIdentifier.includes('@')
+      ? inputIdentifier
+      : `${inputIdentifier.toLowerCase()}@nexoti.local`
 
     const supabase = await createServerSupabaseClient()
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -61,4 +45,5 @@ export async function POST(request: Request) {
     )
   }
 }
+
 

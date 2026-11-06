@@ -1,9 +1,8 @@
 // src/lib/auth.ts
-// Helpers de autenticación Server-First
-// Usa supabase.auth.getUser() (validación criptográfica) en vez de getSession()
+// Helpers de autenticación Server-First basados puramente en Supabase Auth
+// Usa supabase.auth.getUser() (validación criptográfica) y metadatos de sesión
 
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 
 export type SessionUser = {
@@ -15,8 +14,8 @@ export type SessionUser = {
 }
 
 /**
- * Obtiene el usuario autenticado desde Supabase Auth y lo enriquece con datos de Prisma.
- * Retorna null si no hay sesión activa o el usuario está desactivado.
+ * Obtiene el usuario autenticado desde Supabase Auth sin depender de consultas a Prisma.
+ * Extrae rol y datos de perfil directamente de user_metadata / app_metadata.
  */
 export async function getAuthUser(): Promise<SessionUser | null> {
   const supabase = await createServerSupabaseClient()
@@ -24,26 +23,19 @@ export async function getAuthUser(): Promise<SessionUser | null> {
 
   if (error || !user) return null
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: {
-      id: true,
-      fullName: true,
-      username: true,
-      role: true,
-      isActive: true,
-      deletedAt: true,
-    },
-  })
+  const metadata = (user.user_metadata || {}) as Record<string, any>
+  const appMetadata = (user.app_metadata || {}) as Record<string, any>
 
-  if (!dbUser || !dbUser.isActive || dbUser.deletedAt) return null
+  const rawRole = metadata.role || appMetadata.role
+  const role: 'SOLICITANTE' | 'ADMIN_TI' = rawRole === 'ADMIN_TI' ? 'ADMIN_TI' : 'SOLICITANTE'
+  const emailPrefix = user.email ? user.email.split('@')[0] : 'usuario'
 
   return {
-    id: dbUser.id,
-    fullName: dbUser.fullName,
-    username: dbUser.username,
-    role: dbUser.role,
-    isActive: dbUser.isActive,
+    id: user.id,
+    fullName: metadata.fullName || metadata.full_name || emailPrefix,
+    username: metadata.username || emailPrefix,
+    role,
+    isActive: true,
   }
 }
 

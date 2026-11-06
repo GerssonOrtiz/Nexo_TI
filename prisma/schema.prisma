@@ -1,0 +1,360 @@
+// prisma/schema.prisma
+// Nexo_TI V2: Schema Unificado con directUrl, Soft Delete, Cascade en logs y AuditEntity extendido
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SOLICITANTE
+  ADMIN_TI
+}
+
+enum TicketStatus {
+  ABIERTO
+  EN_PROGRESO
+  EN_ESPERA
+  RESUELTO
+  CERRADO
+}
+
+enum TicketPriority {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum TicketCategory {
+  HARDWARE
+  SOFTWARE
+  RED
+  ACCESOS
+  OTRO
+}
+
+enum TaskStatus {
+  PENDIENTE
+  EN_PROGRESO
+  COMPLETADA
+  CANCELADA
+}
+
+enum TaskPriority {
+  BAJA
+  MEDIA
+  ALTA
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  LOGIN
+  LOGIN_FAILED
+}
+
+enum AuditEntity {
+  TICKET
+  TASK
+  KB_ARTICLE
+  USER
+  ELECTRONIC_BOARD
+  PIPELINE
+}
+
+enum BoardStatus {
+  EN_COLA
+  EN_DIAGNOSTICO
+  EN_REPARACION
+  ESPERA_REPUESTOS
+  EN_PRUEBAS
+  REPARADA
+  IRREPARABLE
+}
+
+enum StepStatus {
+  PENDIENTE
+  EN_PROGRESO
+  COMPLETADO
+  SALTADO
+}
+
+enum ComponentStatus {
+  REQUERIDO
+  EN_STOCK
+  SOLICITADO
+  INSTALADO
+}
+
+enum BoardLogType {
+  NOTA_TECNICA
+  MEDICION
+  CAMBIO_ESTADO
+  ALERTA
+}
+
+// ─── Modelos Principales ──────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  fullName     String    @map("full_name")
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  role         Role      @default(SOLICITANTE)
+  isActive     Boolean   @default(true) @map("is_active")
+  deletedAt    DateTime? @map("deleted_at") // Soft delete
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  ticketsCreated  Ticket[]           @relation("TicketCreator")
+  ticketsAssigned Ticket[]           @relation("TicketAssignee")
+  ticketComments  TicketComment[]
+  tasksCreated    Task[]             @relation("TaskCreator")
+  kbArticles      KnowledgeArticle[]
+  auditLogs       AuditLog[]
+
+  // Reparación de Tarjetas
+  boardsAssigned        ElectronicBoard[]   @relation("BoardTechnician")
+  stepProgressCompleted BoardStepProgress[] @relation("StepCompletedBy")
+  boardLogs             BoardLog[]          @relation("BoardLogAuthor")
+
+  @@index([username])
+  @@index([isActive])
+  @@map("users")
+}
+
+model Ticket {
+  id          String         @id @default(uuid())
+  title       String
+  description String         @db.Text
+  status      TicketStatus   @default(ABIERTO)
+  priority    TicketPriority @default(MEDIA)
+  category    TicketCategory @default(OTRO)
+
+  creatorId String @map("creator_id")
+  creator   User   @relation("TicketCreator", fields: [creatorId], references: [id])
+
+  assigneeId String? @map("assignee_id")
+  assignee   User?   @relation("TicketAssignee", fields: [assigneeId], references: [id])
+
+  resolvedAt DateTime? @map("resolved_at")
+  closedAt   DateTime? @map("closed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  comments TicketComment[]
+
+  @@index([status])
+  @@index([creatorId])
+  @@index([assigneeId])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id       String @id @default(uuid())
+  ticketId String @map("ticket_id")
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorId String @map("author_id")
+  author   User   @relation(fields: [authorId], references: [id])
+
+  content    String  @db.Text
+  isInternal Boolean @default(false) @map("is_internal") // nota interna: solo visible para ADMIN_TI
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ticketId])
+  @@map("ticket_comments")
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  title       String
+  description String?      @db.Text
+  status      TaskStatus   @default(PENDIENTE)
+  priority    TaskPriority @default(MEDIA)
+  dueDate     DateTime?    @map("due_date")
+
+  creatorId String @map("creator_id")
+  creator   User   @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  linkedTicketId String? @map("linked_ticket_id") // tarea vinculada a un ticket (opcional)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("tasks")
+}
+
+model KnowledgeArticle {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  content     String   @db.Text // Markdown
+  category    String
+  tags        String[] @default([])
+  isPublished Boolean  @default(false) @map("is_published")
+
+  authorId String @map("author_id")
+  author   User   @relation(fields: [authorId], references: [id])
+
+  viewCount Int @default(0) @map("view_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([isPublished])
+  @@index([slug])
+  @@map("knowledge_articles")
+}
+
+model AuditLog {
+  id       String      @id @default(uuid())
+  action   AuditAction
+  entity   AuditEntity
+  entityId String?     @map("entity_id")
+
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id])
+
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+// ─── Taller Electrónico / Reparación de Tarjetas ─────────────────────────────
+
+model RepairPipeline {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  steps  PipelineStep[]
+  boards ElectronicBoard[]
+
+  @@map("repair_pipelines")
+}
+
+model PipelineStep {
+  id          String         @id @default(uuid())
+  pipelineId  String         @map("pipeline_id")
+  pipeline    RepairPipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stepOrder   Int            @map("step_order")
+  title       String
+  description String         @db.Text
+  isMandatory Boolean        @default(true) @map("is_mandatory")
+
+  boardProgress BoardStepProgress[]
+  currentBoards ElectronicBoard[]   @relation("BoardCurrentStep")
+
+  @@unique([pipelineId, stepOrder])
+  @@map("pipeline_steps")
+}
+
+model ElectronicBoard {
+  id              String      @id @default(uuid())
+  internalCode    String      @unique @map("internal_code") // Código propio (ej. TRJ-2026-001)
+  partNumber      String      @map("part_number")           // Código de fabricante
+  serialNumber    String?     @map("serial_number")         // Número de serie físico
+  modelName       String      @map("model_name")            // Modelo / tipo de tarjeta
+  equipmentOrigin String      @map("equipment_origin")      // Equipo o máquina de origen
+  failureReport   String      @map("failure_report") @db.Text
+  status          BoardStatus @default(EN_COLA)
+
+  pipelineId String         @map("pipeline_id")
+  pipeline   RepairPipeline @relation(fields: [pipelineId], references: [id])
+
+  currentStepId String?       @map("current_step_id")
+  currentStep   PipelineStep? @relation("BoardCurrentStep", fields: [currentStepId], references: [id])
+
+  technicianId String? @map("technician_id")
+  technician   User?   @relation("BoardTechnician", fields: [technicianId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  stepProgress BoardStepProgress[]
+  components   BoardComponent[]
+  logs         BoardLog[]
+
+  @@index([internalCode])
+  @@index([partNumber])
+  @@index([status])
+  @@index([technicianId])
+  @@map("electronic_boards")
+}
+
+model BoardStepProgress {
+  id      String          @id @default(uuid())
+  boardId String          @map("board_id")
+  board   ElectronicBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  stepId String       @map("step_id")
+  step   PipelineStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  status StepStatus @default(PENDIENTE)
+  notes  String?    @db.Text
+
+  completedById String? @map("completed_by_id")
+  completedBy   User?   @relation("StepCompletedBy", fields: [completedById], references: [id])
+
+  completedAt DateTime? @map("completed_at")
+
+  @@unique([boardId, stepId])
+  @@map("board_step_progress")
+}
+
+model BoardComponent {
+  id      String          @id @default(uuid())
+  boardId String          @map("board_id")
+  board   ElectronicBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  designator    String          // ej. R12, C45, U3
+  componentName String          @map("component_name") // ej. Regulador LDO 3.3V
+  package       String?         // ej. SOT-223, DIP-8, SMD 0805
+  partNumber    String?         @map("part_number")
+  quantity      Int             @default(1)
+  status        ComponentStatus @default(REQUERIDO)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([boardId])
+  @@map("board_components")
+}
+
+model BoardLog {
+  id      String          @id @default(uuid())
+  boardId String          @map("board_id")
+  board   ElectronicBoard @relation(fields: [boardId], references: [id], onDelete: Cascade) // Cascada onDelete para integridad
+
+  authorId String @map("author_id")
+  author   User   @relation("BoardLogAuthor", fields: [authorId], references: [id])
+
+  logType BoardLogType @default(NOTA_TECNICA) @map("log_type")
+  content String       @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([boardId])
+  @@map("board_logs")
+}

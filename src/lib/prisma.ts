@@ -1,5 +1,6 @@
 // src/lib/prisma.ts
-// Cliente singleton de Prisma para evitar múltiples instancias en dev (hot reload)
+// Cliente singleton de Prisma para evitar múltiples instancias en entornos serverless y hot-reload
+// Garantiza reutilización de conexión y compatibilidad con PgBouncer en producción
 
 import { PrismaClient } from '@prisma/client'
 
@@ -13,4 +14,6 @@ export const prisma =
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+// Persistir singleton en globalThis en todos los entornos para evitar fugas de conexiones en lambdas/reloads
+globalForPrisma.prisma = prisma
+

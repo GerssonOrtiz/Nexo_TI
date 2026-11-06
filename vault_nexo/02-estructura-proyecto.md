@@ -36,8 +36,9 @@ Nexo_TI/
 │   ├── middleware.ts            # Protección perimetral de rutas + propagación de cookies
 │   │
 │   ├── app/
-│   │   ├── layout.tsx          # Root layout (html lang="es", dark, globals.css)
+│   │   ├── layout.tsx          # Root layout (html lang="es", dark, globals.css, icons)
 │   │   ├── page.tsx            # Redirección raíz → /dashboard
+│   │   ├── favicon.ico         # App icon
 │   │   ├── globals.css         # Glassmorphism CSS components y utilidades
 │   │   │
 │   │   ├── (auth)/
@@ -45,19 +46,21 @@ Nexo_TI/
 │   │   │
 │   │   ├── (dashboard)/
 │   │   │   ├── layout.tsx      # Server Component: requireAuth() → inyecta UserProvider
-│   │   │   ├── dashboard/page.tsx  # Home con stat cards (tickets, boards, KB)
-│   │   │   ├── admin/page.tsx  # Gestión de usuarios + visor Audit Logs
-│   │   │   ├── tickets/
-│   │   │   │   ├── page.tsx    # Kanban board de tickets (5 columnas)
-│   │   │   │   ├── new/page.tsx # Formulario nuevo ticket
-│   │   │   │   └── [id]/page.tsx # Detalle con comentarios e historial
-│   │   │   ├── taller/
-│   │   │   │   ├── page.tsx    # Grid de tarjetas electrónicas
-│   │   │   │   ├── new/page.tsx # Formulario nueva tarjeta (TRJ-YYYY-NNN)
-│   │   │   │   └── [id]/page.tsx # Stepper + BOM + Bitácora técnica
-│   │   │   └── kb/
-│   │   │       ├── page.tsx    # Catálogo de artículos por categoría
-│   │   │       └── [slug]/page.tsx # Visor Markdown sanitizado con tags
+│   │   │   └── dashboard/
+│   │   │       ├── page.tsx    # Home con stat cards (tickets, boards, KB)
+│   │   │       ├── admin/
+│   │   │       │   └── page.tsx # Gestión de usuarios + visor Audit Logs (/dashboard/admin)
+│   │   │       ├── tickets/
+│   │   │       │   ├── page.tsx     # Kanban board de tickets (/dashboard/tickets)
+│   │   │       │   ├── new/page.tsx # Formulario nuevo ticket
+│   │   │       │   └── [id]/page.tsx # Detalle con comentarios e historial
+│   │   │       ├── taller/
+│   │   │       │   ├── page.tsx     # Grid de tarjetas electrónicas (/dashboard/taller)
+│   │   │       │   ├── new/page.tsx # Formulario nueva tarjeta (TRJ-YYYY-NNN)
+│   │   │       │   └── [id]/page.tsx # Stepper + BOM + Bitácora técnica
+│   │   │       └── kb/
+│   │   │           ├── page.tsx     # Catálogo de artículos por categoría (/dashboard/kb)
+│   │   │           └── [slug]/page.tsx # Visor Markdown sanitizado con tags
 │   │   │
 │   │   └── api/
 │   │       ├── auth/login/route.ts     # POST signInWithPassword

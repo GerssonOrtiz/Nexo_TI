@@ -1,7 +1,8 @@
 // prisma/seed.ts
-// Seeder inicial con cuenta admin 'Venllas'
+// Seeder inicial con cuenta admin 'Venllas' tanto en Prisma como en Supabase Auth
 
 import { PrismaClient, Role } from '@prisma/client'
+import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -9,14 +10,15 @@ const prisma = new PrismaClient()
 async function main() {
   const adminUsername = process.env.SEED_ADMIN_USERNAME || 'Venllas'
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'Admin1234!'
+  const adminEmail = `${adminUsername.toLowerCase()}@nexoti.local`
 
-  const existingAdmin = await prisma.user.findUnique({
+  let existingAdmin = await prisma.user.findUnique({
     where: { username: adminUsername },
   })
 
   if (!existingAdmin) {
     const passwordHash = await bcrypt.hash(adminPassword, 12)
-    await prisma.user.create({
+    existingAdmin = await prisma.user.create({
       data: {
         fullName: 'Administrador Principal',
         username: adminUsername,
@@ -25,9 +27,36 @@ async function main() {
         isActive: true,
       },
     })
-    console.log(`✅ Admin user '${adminUsername}' created successfully.`)
+    console.log(`✅ Admin user '${adminUsername}' created in database.`)
   } else {
-    console.log(`ℹ️  Admin user '${adminUsername}' already exists. Skipping.`)
+    console.log(`ℹ️  Admin user '${adminUsername}' already exists in database.`)
+  }
+
+  // Sincronizar o crear usuario en Supabase Auth
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+
+    const { data: userList } = await supabase.auth.admin.listUsers()
+    const supabaseUser = userList?.users?.find(
+      (u) => u.id === existingAdmin!.id || u.email === adminEmail
+    )
+
+    if (!supabaseUser) {
+      await supabase.auth.admin.createUser({
+        id: existingAdmin.id,
+        email: adminEmail,
+        password: adminPassword,
+        email_confirm: true,
+        user_metadata: { username: adminUsername, fullName: existingAdmin.fullName },
+      })
+      console.log(`✅ Admin user '${adminUsername}' synced with Supabase Auth (${adminEmail}).`)
+    } else {
+      console.log(`ℹ️  Admin user already present in Supabase Auth.`)
+    }
   }
 
   // Seed de pipeline de reparación por defecto

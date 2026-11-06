@@ -7,6 +7,12 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Nexo TI — Sistema de Gestión de TI & Taller Electrónico',
   description: 'Plataforma unificada de mesa de ayuda, taller electrónico y base de conocimiento para soporte técnico de TI.',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+  },
 }
 
 export default function RootLayout({
